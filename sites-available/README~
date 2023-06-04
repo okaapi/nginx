@@ -1,0 +1,80 @@
+
+In this file - REDIRECTS, NGINX CONFIGURATION, CERTBOT
+Check it out at https://www.menhardt.com/nginx (requires login)
+
+REDIRECTS
+
+Example menhardt.com:
+1) we want all http requests to go to https
+2) we want menhardt.com requests to go to www.menhardt.com; the reason is that menhardt wiki (a) uses
+   the host name to filter the database (table pages, column site = "www.menhardt.com", so "menhardt.com"
+   is actually a different site); this can be overriden with table site_maps, but (b) menhard with
+   caches requests in a directory cache/www.menhardt.com, and requests to menhardt.com would not hit that
+   cache
+
+Nginx rules
+  http://menhardt.com -> https://www.menhardt.com (in redirect.conf)
+  http://www.menhardt.com -> https://www.menhardt.com (in redirect.conf)
+  https://menhardt.com -> https://www.menhardt.com (first rule in menhardt.conf)
+  https://www.menhardt.com -> forward request to cache (first) or rails (second rule rule in menhardt.conf)
+ 
+
+NGINX CONFIGURATION
+
+sudo nginx -t
+- checks the configuration files
+sudo nginx restart
+- installs the new configuration
+
+
+/etc/nginx/nginx.conf
+  generic, includes conf.d/*, sites-enabled/*, and deny.conf
+/etc/nginx/deny.conf
+  lists "bad" IP addresses
+/etc/nginx/conf.d
+  redirect.conf
+  - redirects http:// protocol to https:// protocol for all sites
+  - could be done using wild card, but doing it explicitly is easer to debug
+/etc/sites-available
+  default.conf
+  - shows /var/rails/html/index.html (check browser console)
+  menhardt.conf
+  - for all *menhardt* urls
+  - redirects https://example...  to https://xxx.example...
+  - then handles https://xxx.example
+  trixi.conf
+  - all of trixi's sites
+  max.conf
+  - all of max's sites
+
+
+CERTBOT
+Certificates are from Certbot, and installed as described in:
+https://certbot.eff.org/lets-encrypt/ubuntuxenial-nginx
+  sudo apt-get update
+  sudo apt-get install software-properties-common
+  sudo add-apt-repository ppa:certbot/certbot
+  sudo apt-get update
+  sudo apt-get install python-certbot-nginx
+
+To create and install a certificate do this:
+  sudo certbot --nginx certonly --cert-name www.menhardt.com
+  ...and it will ask you which sites you want included... it takes the
+  list from the existing nginx configuration, so need to make sure the
+  site is listed - for example in redirect.conf
+
+Certificates are all listed in:
+  sudo ls /etc/letsencrypt/live
+  sudo certbot certificates --cert-name www.menhardt.com  
+  sudo certbot certificates
+
+Remove
+  sudo certbot revoke --cert-path /etc/letsencrypt/live/CERTNAME/cert.pem
+
+Certificates need to be renewed every 4-5 months
+  sudo certbot renew --dry-run
+
+There needs to be a cronjob for renewal - should run every month; the renewal
+only happens when expiry is within the next 30 days
+45 03 15 * * certbot renew --pre-hook "service nginx stop" --post-hook "service nginx start" >> /var/log/letsencrypt/renew.log
+
